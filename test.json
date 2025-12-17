@@ -1,0 +1,12 @@
+{
+  "name": "Alice Johnson",
+  "age": 28,
+  "email": "alice@example.com",
+  "active": true,
+  "skills": ["golang", "rust", "python"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Boston",
+    "zipcode": "02101"
+  }
+}
