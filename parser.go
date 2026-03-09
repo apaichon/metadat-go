@@ -1,6 +1,7 @@
 package metadat
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -83,6 +84,78 @@ func parseValue(fieldType FieldType, valueStr string, lines []string, currentInd
 			return nil, currentIndex, fmt.Errorf("invalid boolean value: %s", valueStr)
 		}
 		return val, currentIndex + 1, nil
+
+	case "decimal":
+		// Decimal: arbitrary-precision decimal stored as string
+		if valueStr == "" && currentIndex+1 < len(lines) {
+			nextLine := strings.TrimSpace(lines[currentIndex+1])
+			if nextLine != "" && !strings.Contains(nextLine, ":") {
+				valueStr = nextLine
+				currentIndex++
+			}
+		}
+		// Validate it's a valid decimal number
+		trimmed := strings.TrimSpace(valueStr)
+		if trimmed == "" {
+			return "", currentIndex + 1, nil
+		}
+		// Validate format: optional minus, digits, optional dot+digits
+		valid := true
+		dotCount := 0
+		for i, ch := range trimmed {
+			if ch == '-' && i == 0 {
+				continue
+			}
+			if ch == '.' {
+				dotCount++
+				if dotCount > 1 {
+					valid = false
+					break
+				}
+				continue
+			}
+			if ch < '0' || ch > '9' {
+				valid = false
+				break
+			}
+		}
+		if !valid || trimmed == "-" || trimmed == "." {
+			return nil, currentIndex, fmt.Errorf("invalid decimal value: %s", trimmed)
+		}
+		return trimmed, currentIndex + 1, nil
+
+	case "byte":
+		// Byte: single unsigned byte (0-255)
+		if valueStr == "" && currentIndex+1 < len(lines) {
+			nextLine := strings.TrimSpace(lines[currentIndex+1])
+			if nextLine != "" && !strings.Contains(nextLine, ":") {
+				valueStr = nextLine
+				currentIndex++
+			}
+		}
+		val, err := strconv.ParseUint(strings.TrimSpace(valueStr), 10, 8)
+		if err != nil {
+			return nil, currentIndex, fmt.Errorf("invalid byte value (must be 0-255): %s", valueStr)
+		}
+		return int(val), currentIndex + 1, nil
+
+	case "binary":
+		// Binary: base64-encoded binary data stored as string
+		if valueStr == "" && currentIndex+1 < len(lines) {
+			nextLine := strings.TrimSpace(lines[currentIndex+1])
+			if nextLine != "" && !strings.Contains(nextLine, ":") {
+				valueStr = nextLine
+				currentIndex++
+			}
+		}
+		trimmed2 := strings.TrimSpace(valueStr)
+		// Validate base64
+		if trimmed2 != "" {
+			if _, err := base64.StdEncoding.DecodeString(trimmed2); err != nil {
+				return nil, currentIndex, fmt.Errorf("invalid base64 binary value: %s", trimmed2)
+			}
+		}
+		return trimmed2, currentIndex + 1, nil
 
 	case "array":
 		return parseArray(fieldType, valueStr, lines, currentIndex)
@@ -250,7 +323,22 @@ func parseObjectFromLine(line string, fieldType *FieldType) (map[string]interfac
 				return nil, 0, fmt.Errorf("invalid boolean for field %s: %s", fieldName, valueStr)
 			}
 			result[fieldName] = val
-			
+
+		case "decimal":
+			// Store as string for arbitrary precision
+			result[fieldName] = valueStr
+
+		case "byte":
+			val, err := strconv.ParseUint(valueStr, 10, 8)
+			if err != nil {
+				return nil, 0, fmt.Errorf("invalid byte for field %s: %s", fieldName, valueStr)
+			}
+			result[fieldName] = int(val)
+
+		case "binary":
+			// Store as base64 string
+			result[fieldName] = valueStr
+
 		default:
 			result[fieldName] = valueStr
 		}

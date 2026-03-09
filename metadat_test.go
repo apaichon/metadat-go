@@ -356,6 +356,563 @@ func TestSchemaValidation(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown field")
 }
 
+// ==================== v1.1 New Type Tests ====================
+
+// --- Decimal Type Tests ---
+
+func TestParseDecimalType(t *testing.T) {
+	content := `meta
+    price: decimal
+data
+    price:
+        12345.6789012345`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "12345.6789012345", result["price"])
+}
+
+func TestParseDecimalNegative(t *testing.T) {
+	content := `meta
+    balance: decimal
+data
+    balance:
+        -9999.123456789`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "-9999.123456789", result["balance"])
+}
+
+func TestParseDecimalInteger(t *testing.T) {
+	content := `meta
+    amount: decimal
+data
+    amount:
+        42`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "42", result["amount"])
+}
+
+func TestParseDecimalInvalid(t *testing.T) {
+	content := `meta
+    price: decimal
+data
+    price:
+        not_a_number`
+
+	parser := NewParser()
+	_, err := parser.ParseMetaDat(content)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid decimal")
+}
+
+func TestWriteDecimalType(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"price": {Type: "decimal"},
+		},
+		FieldOrder: []string{"price"},
+	}
+
+	data := map[string]interface{}{
+		"price": "12345.6789012345",
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "price: decimal")
+	assert.Contains(t, content, "12345.6789012345")
+}
+
+func TestDecimalRoundTrip(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"price": {Type: "decimal"},
+		},
+		FieldOrder: []string{"price"},
+	}
+
+	data := map[string]interface{}{
+		"price": "99999.999999999999",
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+	require.NoError(t, err)
+
+	parser := NewParser()
+	parsed, err := parser.ParseMetaDat(content)
+	require.NoError(t, err)
+	assert.Equal(t, "99999.999999999999", parsed["price"])
+}
+
+func TestDecimalArrayType(t *testing.T) {
+	content := `meta
+    prices: decimal[]
+data
+    prices[3]: 10.50|20.99|30.123456789`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	prices := result["prices"].([]interface{})
+	assert.Len(t, prices, 3)
+	assert.Equal(t, "10.50", prices[0])
+	assert.Equal(t, "20.99", prices[1])
+	assert.Equal(t, "30.123456789", prices[2])
+}
+
+// --- Byte Type Tests ---
+
+func TestParseByteType(t *testing.T) {
+	content := `meta
+    statusCode: byte
+data
+    statusCode:
+        255`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, 255, result["statusCode"])
+}
+
+func TestParseByteZero(t *testing.T) {
+	content := `meta
+    flag: byte
+data
+    flag:
+        0`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result["flag"])
+}
+
+func TestParseByteOutOfRange(t *testing.T) {
+	content := `meta
+    val: byte
+data
+    val:
+        256`
+
+	parser := NewParser()
+	_, err := parser.ParseMetaDat(content)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid byte")
+}
+
+func TestParseByteNegative(t *testing.T) {
+	content := `meta
+    val: byte
+data
+    val:
+        -1`
+
+	parser := NewParser()
+	_, err := parser.ParseMetaDat(content)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid byte")
+}
+
+func TestWriteByteType(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"code": {Type: "byte"},
+		},
+		FieldOrder: []string{"code"},
+	}
+
+	data := map[string]interface{}{
+		"code": 128,
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "code: byte")
+	assert.Contains(t, content, "128")
+}
+
+func TestByteRoundTrip(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"code": {Type: "byte"},
+		},
+		FieldOrder: []string{"code"},
+	}
+
+	data := map[string]interface{}{
+		"code": 200,
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+	require.NoError(t, err)
+
+	parser := NewParser()
+	parsed, err := parser.ParseMetaDat(content)
+	require.NoError(t, err)
+	assert.Equal(t, 200, parsed["code"])
+}
+
+func TestByteArrayType(t *testing.T) {
+	content := `meta
+    flags: byte[]
+data
+    flags[3]: 0|128|255`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	flags := result["flags"].([]interface{})
+	assert.Len(t, flags, 3)
+	assert.Equal(t, "0", flags[0])
+	assert.Equal(t, "128", flags[1])
+	assert.Equal(t, "255", flags[2])
+}
+
+// --- Binary Type Tests ---
+
+func TestParseBinaryType(t *testing.T) {
+	content := `meta
+    avatar: binary
+data
+    avatar:
+        SGVsbG8gV29ybGQ=`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "SGVsbG8gV29ybGQ=", result["avatar"])
+}
+
+func TestParseBinaryEmpty(t *testing.T) {
+	content := `meta
+    data: binary
+data
+    data:`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "", result["data"])
+}
+
+func TestParseBinaryInvalidBase64(t *testing.T) {
+	content := `meta
+    avatar: binary
+data
+    avatar:
+        !!!not-valid-base64!!!`
+
+	parser := NewParser()
+	_, err := parser.ParseMetaDat(content)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid base64")
+}
+
+func TestWriteBinaryType(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"avatar": {Type: "binary"},
+		},
+		FieldOrder: []string{"avatar"},
+	}
+
+	data := map[string]interface{}{
+		"avatar": "SGVsbG8gV29ybGQ=",
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "avatar: binary")
+	assert.Contains(t, content, "SGVsbG8gV29ybGQ=")
+}
+
+func TestBinaryRoundTrip(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"avatar": {Type: "binary"},
+		},
+		FieldOrder: []string{"avatar"},
+	}
+
+	data := map[string]interface{}{
+		"avatar": "SGVsbG8gV29ybGQ=",
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+	require.NoError(t, err)
+
+	parser := NewParser()
+	parsed, err := parser.ParseMetaDat(content)
+	require.NoError(t, err)
+	assert.Equal(t, "SGVsbG8gV29ybGQ=", parsed["avatar"])
+}
+
+// --- Combined Tests ---
+
+func TestParseAllNewTypes(t *testing.T) {
+	content := `meta
+    name: string
+    balance: decimal
+    avatar: binary
+    statusCode: byte
+data
+    name:
+        John Doe
+    balance:
+        12345.6789012345
+    avatar:
+        SGVsbG8gV29ybGQ=
+    statusCode:
+        42`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "John Doe", result["name"])
+	assert.Equal(t, "12345.6789012345", result["balance"])
+	assert.Equal(t, "SGVsbG8gV29ybGQ=", result["avatar"])
+	assert.Equal(t, 42, result["statusCode"])
+}
+
+func TestWriteAllNewTypes(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"name":       {Type: "string"},
+			"balance":    {Type: "decimal"},
+			"avatar":     {Type: "binary"},
+			"statusCode": {Type: "byte"},
+		},
+		FieldOrder: []string{"name", "balance", "avatar", "statusCode"},
+	}
+
+	data := map[string]interface{}{
+		"name":       "Jane",
+		"balance":    "99.99",
+		"avatar":     "AQID",
+		"statusCode": 200,
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "name: string")
+	assert.Contains(t, content, "balance: decimal")
+	assert.Contains(t, content, "avatar: binary")
+	assert.Contains(t, content, "statusCode: byte")
+	assert.Contains(t, content, "Jane")
+	assert.Contains(t, content, "99.99")
+	assert.Contains(t, content, "AQID")
+	assert.Contains(t, content, "200")
+}
+
+func TestAllNewTypesRoundTrip(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"name":       {Type: "string"},
+			"balance":    {Type: "decimal"},
+			"avatar":     {Type: "binary"},
+			"statusCode": {Type: "byte"},
+		},
+		FieldOrder: []string{"name", "balance", "avatar", "statusCode"},
+	}
+
+	data := map[string]interface{}{
+		"name":       "Alice",
+		"balance":    "12345.6789012345",
+		"avatar":     "SGVsbG8gV29ybGQ=",
+		"statusCode": 128,
+	}
+
+	writer := NewWriter()
+	writer.SetSchema(schema)
+	content, err := writer.WriteMetaDat(data)
+	require.NoError(t, err)
+
+	parser := NewParser()
+	parsed, err := parser.ParseMetaDat(content)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Alice", parsed["name"])
+	assert.Equal(t, "12345.6789012345", parsed["balance"])
+	assert.Equal(t, "SGVsbG8gV29ybGQ=", parsed["avatar"])
+	assert.Equal(t, 128, parsed["statusCode"])
+}
+
+func TestObjectWithNewTypes(t *testing.T) {
+	content := `meta
+    item: {name:string|price:decimal|weight:byte}
+data
+    item:
+        Widget|19.99|50`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	item := result["item"].(map[string]interface{})
+	assert.Equal(t, "Widget", item["name"])
+	assert.Equal(t, "19.99", item["price"])
+	assert.Equal(t, 50, item["weight"])
+}
+
+func TestArrayOfObjectsWithNewTypes(t *testing.T) {
+	content := `meta
+    items: {name:string|price:decimal|code:byte}[]
+data
+    items[2]:
+        Product A|29.99|100
+        Product B|49.999|200`
+
+	parser := NewParser()
+	result, err := parser.ParseMetaDat(content)
+
+	require.NoError(t, err)
+	items := result["items"].([]interface{})
+	assert.Len(t, items, 2)
+
+	item1 := items[0].(map[string]interface{})
+	assert.Equal(t, "Product A", item1["name"])
+	assert.Equal(t, "29.99", item1["price"])
+	assert.Equal(t, 100, item1["code"])
+
+	item2 := items[1].(map[string]interface{})
+	assert.Equal(t, "Product B", item2["name"])
+	assert.Equal(t, "49.999", item2["price"])
+	assert.Equal(t, 200, item2["code"])
+}
+
+func TestSchemaValidationDecimal(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"price": {Type: "decimal"},
+		},
+	}
+
+	validData := map[string]interface{}{
+		"price": "19.99",
+	}
+	assert.NoError(t, schema.ValidateData(validData))
+
+	invalidData := map[string]interface{}{
+		"price": 19.99, // float64 instead of string
+	}
+	err := schema.ValidateData(invalidData)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected decimal")
+}
+
+func TestSchemaValidationByte(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"code": {Type: "byte"},
+		},
+	}
+
+	validData := map[string]interface{}{
+		"code": 128,
+	}
+	assert.NoError(t, schema.ValidateData(validData))
+
+	outOfRangeData := map[string]interface{}{
+		"code": 300,
+	}
+	err := schema.ValidateData(outOfRangeData)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "byte value out of range")
+}
+
+func TestSchemaValidationBinary(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"data": {Type: "binary"},
+		},
+	}
+
+	validData := map[string]interface{}{
+		"data": "SGVsbG8=",
+	}
+	assert.NoError(t, schema.ValidateData(validData))
+
+	invalidData := map[string]interface{}{
+		"data": 12345, // int instead of string
+	}
+	err := schema.ValidateData(invalidData)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expected binary")
+}
+
+func TestDecimalInSchemaToString(t *testing.T) {
+	schema := Schema{
+		Fields: map[string]FieldType{
+			"price":  {Type: "decimal"},
+			"avatar": {Type: "binary"},
+			"flag":   {Type: "byte"},
+		},
+		FieldOrder: []string{"price", "avatar", "flag"},
+	}
+
+	str := schema.ToString()
+	assert.Contains(t, str, "price: decimal")
+	assert.Contains(t, str, "avatar: binary")
+	assert.Contains(t, str, "flag: byte")
+}
+
+func TestParseSchemaWithNewTypes(t *testing.T) {
+	schemaStr := `    price: decimal
+    avatar: binary
+    code: byte
+    flags: byte[]
+    prices: decimal[]`
+
+	parser := NewParser()
+	err := parser.ParseSchema(schemaStr)
+	require.NoError(t, err)
+
+	// Verify by parsing with this schema
+	assert.Equal(t, "decimal", parser.schema.Fields["price"].Type)
+	assert.Equal(t, "binary", parser.schema.Fields["avatar"].Type)
+	assert.Equal(t, "byte", parser.schema.Fields["code"].Type)
+	assert.Equal(t, "array", parser.schema.Fields["flags"].Type)
+	assert.Equal(t, "byte", parser.schema.Fields["flags"].ElementType.Type)
+	assert.Equal(t, "array", parser.schema.Fields["prices"].Type)
+	assert.Equal(t, "decimal", parser.schema.Fields["prices"].ElementType.Type)
+}
+
 // Benchmark tests
 func BenchmarkWriteStruct(b *testing.B) {
 	user := User{

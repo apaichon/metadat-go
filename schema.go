@@ -109,7 +109,8 @@ func parseType(typeStr string) (FieldType, error) {
 
 	// Basic type
 	switch typeStr {
-	case "string", "int", "int32", "int64", "float32", "float64", "bool":
+	case "string", "int", "int32", "int64", "float32", "float64", "bool",
+		"decimal", "byte", "binary":
 		return FieldType{Type: typeStr}, nil
 	default:
 		return FieldType{}, fmt.Errorf("unknown type: %s", typeStr)
@@ -381,7 +382,34 @@ func validateValue(value interface{}, fieldType FieldType) error {
 		default:
 			return fmt.Errorf("expected float, got %T", value)
 		}
-		
+
+	case "decimal":
+		// Decimal is stored as string for arbitrary precision
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("expected decimal (string), got %T", value)
+		}
+
+	case "byte":
+		// Byte is an unsigned integer 0-255
+		switch v := value.(type) {
+		case int:
+			if v < 0 || v > 255 {
+				return fmt.Errorf("byte value out of range: %d", v)
+			}
+		case float64:
+			if v < 0 || v > 255 || v != float64(int(v)) {
+				return fmt.Errorf("invalid byte value: %v", v)
+			}
+		default:
+			return fmt.Errorf("expected byte (int 0-255), got %T", value)
+		}
+
+	case "binary":
+		// Binary is stored as base64-encoded string
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("expected binary (base64 string), got %T", value)
+		}
+
 	case "bool":
 		if _, ok := value.(bool); !ok {
 			return fmt.Errorf("expected bool, got %T", value)

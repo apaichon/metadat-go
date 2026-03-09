@@ -26,8 +26,12 @@ Complete Go library for MetaDat format with full read/write capabilities for bot
 
 ### ✅ **Type System Support**
 - Basic types: `string`, `int`, `int32`, `int64`, `float32`, `float64`, `bool`
-- Arrays: `type[]` with both inline and multi-line formats
-- Objects: `{field1:type1|field2:type2}` with pipe-delimited values
+- **v1.1 Extended types**: `decimal`, `binary`, `byte`
+  - `decimal`: Arbitrary-precision decimal values stored as strings (no float rounding)
+  - `binary`: Base64-encoded binary data with validation
+  - `byte`: Single unsigned byte (0-255) for compact storage
+- Arrays: `type[]` with both inline and multi-line formats (including `byte[]`, `decimal[]`)
+- Objects: `{field1:type1|field2:type2}` with pipe-delimited values (supports v1.1 types)
 - Nested structures: Unlimited depth support
 
 ### ✅ **Schema Management**
@@ -99,6 +103,33 @@ metadatStr, err := metadat.ConvertJSONToMetaDat(jsonStr)
 jsonResult, err := metadat.ConvertMetaDatToJSON(metadatStr)
 ```
 
+### v1.1 Extended Types
+```go
+// Decimal - arbitrary-precision (financial, scientific)
+schema := metadat.Schema{
+    Fields: map[string]metadat.FieldType{
+        "price": {Type: "decimal"},
+    },
+    FieldOrder: []string{"price"},
+}
+data := map[string]interface{}{"price": "12345.6789012345"}
+
+// Binary - base64-encoded file content
+schema.Fields["avatar"] = metadat.FieldType{Type: "binary"}
+data["avatar"] = "iVBORw0KGgoAAAANSUhEUgAAAAE="
+
+// Byte - compact unsigned integer (0-255)
+schema.Fields["status"] = metadat.FieldType{Type: "byte"}
+data["status"] = 200
+
+// byte[] - large file as byte array
+schema.Fields["payload"] = metadat.FieldType{
+    Type:        "array",
+    ElementType: &metadat.FieldType{Type: "byte"},
+}
+data["payload"] = []interface{}{0, 127, 255}
+```
+
 ## Output Examples
 
 ### Single File Output
@@ -107,18 +138,29 @@ meta
     name: string
     age: int
     active: bool
+    balance: decimal
+    avatar: binary
+    level: byte
     skills: string[]
+    flags: byte[]
     address: {city:string|street:string|zipcode:string}
 data
-    active:
-        true
-    address:
-        Boston|123 Main St|02101
-    age:
-        28
     name:
         Alice Johnson
+    age:
+        28
+    active:
+        true
+    balance:
+        50000.123456789
+    avatar:
+        SGVsbG8gV29ybGQ=
+    level:
+        42
     skills[3]: golang|rust|python
+    flags[4]: 1|2|4|8
+    address:
+        Boston|123 Main St|02101
 ```
 
 ### Separated Files Output
@@ -128,21 +170,32 @@ data
     name: string
     age: int
     active: bool
+    balance: decimal
+    avatar: binary
+    level: byte
     skills: string[]
+    flags: byte[]
     address: {city:string|street:string|zipcode:string}
 ```
 
 **Data file:**
 ```
-active:
-    true
-address:
-    Boston|123 Main St|02101
-age:
-    28
 name:
     Alice Johnson
+age:
+    28
+active:
+    true
+balance:
+    50000.123456789
+avatar:
+    SGVsbG8gV29ybGQ=
+level:
+    42
 skills[3]: golang|rust|python
+flags[4]: 1|2|4|8
+address:
+    Boston|123 Main St|02101
 ```
 
 ## Performance Benefits
@@ -161,7 +214,7 @@ skills[3]: golang|rust|python
 
 ## Testing
 
-Comprehensive test suite covering:
+Comprehensive test suite (40 tests) covering:
 - ✅ Basic struct serialization
 - ✅ Complex nested structures
 - ✅ Array handling (both inline and multi-line)
@@ -171,8 +224,13 @@ Comprehensive test suite covering:
 - ✅ Error handling
 - ✅ File I/O operations
 - ✅ JSON conversion
+- ✅ **v1.1 decimal type**: parse, write, round-trip, negative values, arrays, validation, invalid input
+- ✅ **v1.1 byte type**: parse, write, round-trip, range validation (0-255), arrays, negative/overflow errors
+- ✅ **v1.1 binary type**: parse, write, round-trip, base64 validation, empty values, invalid input
+- ✅ **v1.1 combined**: all new types together, objects with new types, arrays of objects with new types
+- ✅ **Schema parsing**: new type recognition, array element types
 
-All tests pass with 100% compatibility.
+All 40 tests pass with 100% compatibility.
 
 ## CLI Tool
 
@@ -205,12 +263,17 @@ metadat-go/
 └── README.md           # Documentation
 ```
 
+## Version History
+
+- **v1.1.0** - Extended type system: `decimal`, `binary`, `byte` types with full read/write/validation support
+- **v1.0.0** - Initial release with core type system and format support
+
 ## Future Enhancements
 
-- Binary encoding support for further compression
 - Streaming parser for very large files
 - Schema evolution and versioning
 - IDE plugins for syntax highlighting
 - Performance optimizations for specific use cases
+- Binary wire format for further compression
 
 This Go library provides a complete, production-ready implementation of the MetaDat format with excellent performance characteristics and full feature support.

@@ -411,6 +411,18 @@ func (w *Writer) writeField(name string, value interface{}, fieldType FieldType,
 	case "bool":
 		return fmt.Sprintf("%s%s:\n%s    %v", indentStr, name, indentStr, value), nil
 
+	case "decimal":
+		// Decimal stored as string for arbitrary precision
+		return fmt.Sprintf("%s%s:\n%s    %v", indentStr, name, indentStr, value), nil
+
+	case "byte":
+		// Byte is an unsigned integer 0-255
+		return fmt.Sprintf("%s%s:\n%s    %v", indentStr, name, indentStr, value), nil
+
+	case "binary":
+		// Binary stored as base64 string
+		return fmt.Sprintf("%s%s:\n%s    %v", indentStr, name, indentStr, value), nil
+
 	case "array":
 		arr, ok := value.([]interface{})
 		if !ok {
@@ -512,7 +524,8 @@ func (w *Writer) writeArrayItem(item interface{}, itemType *FieldType, indent in
 
 func isSimpleType(t string) bool {
 	return t == "string" || t == "int" || t == "int32" || t == "int64" ||
-		t == "float32" || t == "float64" || t == "bool"
+		t == "float32" || t == "float64" || t == "bool" ||
+		t == "decimal" || t == "byte" || t == "binary"
 }
 
 func convertToInterfaceSlice(v interface{}) []interface{} {

@@ -11,6 +11,7 @@ A Go library for reading and writing MetaDat format files. MetaDat is a schema-f
 - **JSON Conversion**: Convert between JSON and MetaDat formats
 - **Array Size Handling**: Automatically reads array sizes from MetaDat format declarations
 - **High Performance**: Efficient parsing and serialization
+- **v1.1 Extended Types**: `decimal` (arbitrary-precision), `binary` (base64-encoded), `byte` (0-255)
 
 ## Installation
 
@@ -152,6 +153,54 @@ metadatStr, err := metadat.ConvertJSONToMetaDat(jsonStr)
 jsonResult, err := metadat.ConvertMetaDatToJSON(metadatStr)
 ```
 
+### v1.1 Types: decimal, byte, binary
+
+```go
+schema := metadat.Schema{
+    Fields: map[string]metadat.FieldType{
+        "product":  {Type: "string"},
+        "price":    {Type: "decimal"},   // arbitrary-precision decimal
+        "avatar":   {Type: "binary"},    // base64-encoded binary data
+        "priority": {Type: "byte"},      // unsigned integer 0-255
+        "payload":  {Type: "array", ElementType: &metadat.FieldType{Type: "byte"}},
+    },
+    FieldOrder: []string{"product", "price", "avatar", "priority", "payload"},
+}
+
+data := map[string]interface{}{
+    "product":  "Gold Bar",
+    "price":    "2345.6789012345",                  // full precision preserved
+    "avatar":   "iVBORw0KGgoAAAANSUhEUgAAAAE=",     // base64 string
+    "priority": 128,                                 // byte value
+    "payload":  []interface{}{0, 127, 255},          // byte array
+}
+
+writer := metadat.NewWriter()
+writer.SetSchema(schema)
+content, err := writer.WriteMetaDat(data)
+```
+
+Output:
+```
+meta
+    product: string
+    price: decimal
+    avatar: binary
+    priority: byte
+    payload: byte[]
+
+data
+    product:
+        Gold Bar
+    price:
+        2345.6789012345
+    avatar:
+        iVBORw0KGgoAAAANSUhEUgAAAAE=
+    priority:
+        128
+    payload[3]: 0|127|255
+```
+
 ## API Reference
 
 ### Writer
@@ -205,6 +254,73 @@ Infers a MetaDat schema from JSON data.
 #### `ValidateData(data map[string]interface{}) error`
 Validates data against the schema.
 
+## Type System
+
+### Basic Types (v1.0)
+| Type | Go Representation | Description | Example |
+|------|-------------------|-------------|---------|
+| `string` | `string` | UTF-8 text | `Hello World` |
+| `int` | `int` | 32-bit signed integer | `42` |
+| `int32` | `int` | 32-bit signed integer | `42` |
+| `int64` | `int` | 64-bit signed integer | `9223372036854775807` |
+| `float32` | `float32` | 32-bit floating point | `3.14` |
+| `float64` | `float64` | 64-bit floating point | `3.141592653589793` |
+| `bool` | `bool` | Boolean value | `true` / `false` |
+
+### Extended Types (v1.1)
+| Type | Go Representation | Description | Example |
+|------|-------------------|-------------|---------|
+| `decimal` | `string` | Arbitrary-precision decimal (no float rounding) | `12345.6789012345` |
+| `binary` | `string` | Base64-encoded binary data | `SGVsbG8gV29ybGQ=` |
+| `byte` | `int` | Single unsigned byte (0-255) | `255` |
+
+### Complex Types
+| Type | Syntax | Example |
+|------|--------|---------|
+| Array | `type[]` | `string[]`, `byte[]`, `decimal[]` |
+| Object | `{field1:type1\|field2:type2}` | `{name:string\|price:decimal}` |
+| Array of Objects | `{field:type}[]` | `{name:string\|weight:byte}[]` |
+
+### v1.1 Type Details
+
+**`decimal`** - Use for financial data, scientific measurements, or any value where floating-point rounding is unacceptable. Values are stored and parsed as strings to preserve exact precision.
+
+**`binary`** - Use for embedding files, images, cryptographic keys, or any raw binary content. Data is encoded as standard Base64 (RFC 4648). The parser validates the Base64 encoding on read.
+
+**`byte`** - Use for status codes, flags, protocol fields, or pixel data. Accepts unsigned integers from 0 to 255. `byte[]` arrays use pipe-separated inline format for compact storage of raw byte sequences.
+
+### Storing Large Files with byte[]
+
+For binary files that need individual byte access (e.g., firmware, pixel data), use `byte[]`:
+
+```
+meta
+    filename: string
+    size: int
+    content: byte[]
+
+data
+    filename:
+        firmware_v2.bin
+    size:
+        256
+    content[256]: 0|1|2|3|4|5|...|253|254|255
+```
+
+For opaque binary blobs (e.g., images, documents), prefer `binary` which stores the entire file as a single Base64 string:
+
+```
+meta
+    filename: string
+    content: binary
+
+data
+    filename:
+        photo.png
+    content:
+        iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAY...
+```
+
 ## Examples
 
 ### Complex Nested Structure
@@ -254,40 +370,69 @@ data
         TechCorp
 ```
 
-### Custom Schema Definition
+### Custom Schema with v1.1 Types
 
 ```go
-// Define schema manually
 schema := metadat.Schema{
     Fields: map[string]metadat.FieldType{
-        "userId": {Type: "string"},
-        "settings": {
-            Type: "object",
-            ObjectFields: map[string]metadat.FieldType{
-                "theme": {Type: "string"},
-                "notifications": {Type: "bool"},
+        "userId":  {Type: "string"},
+        "balance": {Type: "decimal"},
+        "avatar":  {Type: "binary"},
+        "level":   {Type: "byte"},
+        "items": {
+            Type: "array",
+            ElementType: &metadat.FieldType{
+                Type: "object",
+                ObjectFields: map[string]metadat.FieldType{
+                    "name":   {Type: "string"},
+                    "price":  {Type: "decimal"},
+                    "weight": {Type: "byte"},
+                },
+                ObjectOrder: []string{"name", "price", "weight"},
             },
         },
-        "scores": {
-            Type: "array",
-            ElementType: &metadat.FieldType{Type: "int"},
-        },
     },
+    FieldOrder: []string{"userId", "balance", "avatar", "level", "items"},
 }
 
 writer := metadat.NewWriter()
 writer.SetSchema(schema)
 
 data := map[string]interface{}{
-    "userId": "U12345",
-    "settings": map[string]interface{}{
-        "theme": "dark",
-        "notifications": true,
+    "userId":  "U12345",
+    "balance": "50000.123456789",
+    "avatar":  "SGVsbG8gV29ybGQ=",
+    "level":   42,
+    "items": []interface{}{
+        map[string]interface{}{"name": "Sword", "price": "199.99", "weight": 150},
+        map[string]interface{}{"name": "Shield", "price": "149.50", "weight": 200},
     },
-    "scores": []interface{}{95, 87, 92, 88},
 }
 
 content, err := writer.WriteMetaDat(data)
+```
+
+Output:
+```
+meta
+    userId: string
+    balance: decimal
+    avatar: binary
+    level: byte
+    items: {name:string|price:decimal|weight:byte}[]
+
+data
+    userId:
+        U12345
+    balance:
+        50000.123456789
+    avatar:
+        SGVsbG8gV29ybGQ=
+    level:
+        42
+    items[2]:
+        Sword|199.99|150
+        Shield|149.50|200
 ```
 
 ## Array Size Handling
@@ -298,15 +443,18 @@ The MetaDat format embeds array sizes directly in the data section. The library 
 ```
 meta
     tags: string[]
-    products: {id:int|name:string|price:float64}[]
+    prices: decimal[]
+    flags: byte[]
+    products: {id:int|name:string|price:decimal|weight:byte}[]
 
 data
     tags[3]: electronics|computers|premium
-    products[1000000]:
-        1|Widget A|19.99
-        2|Widget B|29.99
-        3|Widget C|39.99
-        ...
+    prices[3]: 19.99|29.999|39.12345
+    flags[4]: 0|128|200|255
+    products[3]:
+        1|Widget A|19.99|50
+        2|Widget B|29.99|100
+        3|Widget C|39.99|200
 ```
 
 ### Key Features:
@@ -339,7 +487,7 @@ BenchmarkParseMetaDat-8     200000      7832 ns/op     2144 B/op      58 allocs/
 
 ## Testing
 
-Run the test suite:
+Run the test suite (40 tests including v1.1 type coverage):
 
 ```bash
 go test -v
@@ -350,6 +498,17 @@ Run benchmarks:
 ```bash
 go test -bench=. -benchmem
 ```
+
+### Test Coverage
+
+- Basic types: string, int, int32, int64, float32, float64, bool
+- v1.1 types: decimal, byte, binary (parsing, writing, round-trip, validation, edge cases)
+- Arrays: inline and multi-line formats, byte[], decimal[]
+- Objects: with all type combinations including v1.1 types
+- Array of objects: with decimal and byte fields
+- Schema validation: type checking for all types
+- File I/O: single and separated file modes
+- JSON conversion: round-trip integrity
 
 ## Contributing
 
